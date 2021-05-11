@@ -12,112 +12,131 @@ from xpress import *
 from collections import Counter
 
 # input data
-rijkh=pd.read_csv("r_ijkh_decision_var.csv")
+rijkh = pd.read_csv("r_ijkh_decision_var.csv")
 master_data = pd.read_csv("r_ijkh_decision_var.csv")
-#print(master_data)
+# print(master_data)
 site_list = master_data.loc[:, 'site']
 site_list = site_list.unique()
 OU_list = master_data.loc[:, 'OU']
 OU_list = OU_list.unique()
 Plangrp_list = master_data.loc[:, 'Plangrp']
 Plangrp_list = Plangrp_list.unique()
-#print('sites: ', site_list)
-# print('OU: ', OU_list)
-# print('Plangrp_list', Plangrp_list)
+
+
+
 master_data.set_index(['site', 'OU', 'Plangrp', 'shift'], inplace=True)
 value_dict = master_data.to_dict()
 
-
-Time_Shift_data=pd.read_csv("u_ht_binary_var.csv")
+Time_Shift_data = pd.read_csv("u_ht_binary_var.csv")
 # print(Time_Shift_data)
-time_list=Time_Shift_data.loc[:,'time']
-time_list=time_list.unique()
-shift_list=Time_Shift_data.loc[:,'shift']
-shift_list=shift_list.unique()
-# print('time',time_list)
-# print('shift',shift_list)
-Time_Shift_data.set_index(['time','shift'],inplace=True)
-Binary_dict=Time_Shift_data.to_dict()
+time_list = Time_Shift_data.loc[:, 'time']
+time_list = time_list.unique()
+
+shift_list = Time_Shift_data.loc[:, 'shift']
+shift_list = shift_list.unique()
 
 
-Current_SU=pd.read_csv("Current_SU.csv")
+Time_Shift_data.set_index(['time', 'shift'], inplace=True)
+Binary_dict = Time_Shift_data.to_dict()
+
+Current_SU = pd.read_csv("Current_SU.csv")
 # print(Current_SU)
-CurrentSU=Current_SU[['site','SU']]
+CurrentSU = Current_SU[['site', 'SU']]
 # print(CurrentSU)
-CurrentSU=CurrentSU.set_index(['site'])
-SU_dict=CurrentSU.to_dict()
+CurrentSU = CurrentSU.set_index(['site'])
+SU_dict = CurrentSU.to_dict()
 # print(SU_dict)
 
-Max_Seats=Current_SU[['site','MaxCapacity']]
-Max_seats=Max_Seats.set_index(['site'])
-Max_seats_dict=Max_seats.to_dict()
+Max_Seats = Current_SU[['site', 'MaxCapacity']]
+Max_seats = Max_Seats.set_index(['site'])
+Max_seats_dict = Max_seats.to_dict()
 # print(Max_seats_dict)
 
+flag_xpress_trial_version = 1   # Set 1 to run trial version; 0 to run commercial version
+#   Make small problem for trial version of Fico Xpress
+if flag_xpress_trial_version:
+    site_list = site_list[0:2]
+    OU_list = OU_list[0:3]
+    Plangrp_list = Plangrp_list[0:3]
+    time_list = time_list[0:3]
+    shift_list = shift_list[0:3]
+    print('Running Xpress trial version')
+    print('sites: ', len(site_list))
+    print('OU: ', len(OU_list))
+    print('Plangrp_list: ', len(Plangrp_list))
+    print('time', len(time_list))
+    print('shift', len(shift_list))
+else:
+    print('\n\nRunning Xpress commercial version\n\n')
 
-M0=10
+M0 = 10
 
+# decision variable
 
-# decision variable 
+x = {(i, j, k, h): xp.var(vartype=xp.integer, name="x_{0}_{1}_{2}_{3}".format(i, j, k, h))
+     for j in OU_list for k in Plangrp_list for i in site_list for h in shift_list}
 
-x = {(i,j,k,h): xp.var(vartype=xp.integer,name="x_{0}_{1}_{2}_{3}".format(i,j,k,h))
-                     for j in OU_list for k in Plangrp_list for i in site_list for h in shift_list}
+y = {(i, t): xp.var(vartype=xp.continuous, name="y_{0}_{1}".format(i, t))
+     for i in site_list for t in time_list}
 
+Z = {i: xp.var(vartype=xp.continuous, name="Z_{0}".format(i))
+     for i in site_list}
 
-y ={(i,t):xp.var(vartype=xp.continuous,name="y_{0}_{1}".format(i,t))
-                    for i in site_list for t in time_list}
+W = {i: xp.var(vartype=xp.continuous, name="W_{0}".format(i))
+     for i in site_list}
 
-Z = {(i):xp.var(vartype=xp.continuous,name="Z_{0}".format(i))
-                    for i in site_list}
-W = {(i):xp.var(vartype=xp.continuous,name="W_{0}".format(i))
-                    for i in site_list}
+# parameters
 
+a = 2
+b = 2
 
-#parameters
+model = xp.problem()
+model = xp.problem(name="SU_Optimization")
 
-a=2
-b=2
-
-model=xp.problem()
-model=xp.problem(name="SU_Optimization")
-
-model.addVariable(x,y,Z,W)
+model.addVariable(x, y, Z, W)
 
 # adding constraints 
 
-myconstr1=(y[i][t]<=Z[i] for i in site_list for t in time_list)
+myconstr1 = (y[i, t] <= Z[i] for i in site_list for t in time_list)
 
-myconstr2= (2*Z[i]<=W[i] for i in site_list)
+myconstr2 = (2 * Z[i] <= W[i] for i in site_list)
 
-#Counter({key : x[i][j][k][h][key] * Binary_dict[key] for key in x[i][j][k][h]})
-# I tried using above this since I thought product between two dictonary might be in a different way
-"""
-pack = {'nuts':4.0,
-        'bolts':300.0,
-        'screws':140.0,
-        'wire(m)':3.5}
+for h in shift_list:
+    for t in time_list:
+        if Binary_dict.get((h, t)) is not None:
+            print((h, t), '\t', Binary_dict.get(h, t))
+        else:
+            print('No values for key ', (h, t), '\t myconstr3 will not work')
 
-for key,val in pack.items():
-    total = val * amount
-    print(total,key)
-    
-    
-"""
-    
-myconstr3= [xp.Sum(x[i][j][k][h]*Binary_dict for j in OU_list for k in Plangrp_list for h in shift_list)==y[i][t] for i in site_list for t in time_list]
-
-
-myconstr4=[b*value_dict<=x[i,j,k,h]<=a*value_dict for i in site_list for j in OU_list for k in Plangrp_list for h in shift_list ]
+for i in site_list:
+    for j in OU_list:
+        for k in Plangrp_list:
+            for h in shift_list:
+                if value_dict.get((i, j, k, h)) is not None:
+                    print((i, j, k, h), '\t', value_dict.get((i, j, k, h)))
+                else:
+                    print((i, j, k, h), '\t')
 
 
+myconstr3 = [xp.Sum(x[i, j, k, h] * Binary_dict.get(h, t) for j in OU_list for k in Plangrp_list for h in shift_list)
+             == y[i, t] for i in site_list for t in time_list]
 
+myconstr4 = []
+for i in site_list:
+    for j in OU_list:
+        for k in Plangrp_list:
+            for h in shift_list:
+                if value_dict.get((i, j, k, h)) is not None:
+                    myconstr4.append(
+                        b * int(value_dict.get([i, j, k, h])) <= x[i, j, k, h] <= a * int(value_dict.get([i, j, k, h])))
 
-model.addConstraint(myconstr1,myconstr2)
+model.addConstraint(myconstr1, myconstr2, myconstr3, myconstr4)
 
-model.setObjective(xp.Sum([Z[i] for i in site_list]), sense = xp.minimize)
-
+model.setObjective(xp.Sum([Z[i] for i in site_list]), sense=xp.minimize)
+model.write("example0", "lp")
 model.solve()
-
-
+print("objective value:", model.getObjVal())
+print("solution:", model.getSolution())
 
 '''
 # Multicommodity flow example.
