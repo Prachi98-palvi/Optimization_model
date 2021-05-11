@@ -9,61 +9,67 @@ import numpy as np
 import pandas as pd
 import xpress as xp
 from xpress import *
+from collections import Counter
 
 # input data
-
+rijkh=pd.read_csv("r_ijkh_decision_var.csv")
 master_data = pd.read_csv("r_ijkh_decision_var.csv")
-print(master_data)
+#print(master_data)
 site_list = master_data.loc[:, 'site']
 site_list = site_list.unique()
 OU_list = master_data.loc[:, 'OU']
 OU_list = OU_list.unique()
 Plangrp_list = master_data.loc[:, 'Plangrp']
 Plangrp_list = Plangrp_list.unique()
-print('sites: ', site_list)
-print('OU: ', OU_list)
-print('Plangrp_list', Plangrp_list)
+#print('sites: ', site_list)
+# print('OU: ', OU_list)
+# print('Plangrp_list', Plangrp_list)
 master_data.set_index(['site', 'OU', 'Plangrp', 'shift'], inplace=True)
 value_dict = master_data.to_dict()
 
 
-uht=pd.read_csv("u_ht_binary_var.csv")
-uh=uht.set_index(['shift','time'],inplace=True)
-u=uht.to_dict()
-S=pd.read_csv("Current_SU.csv")
+Time_Shift_data=pd.read_csv("u_ht_binary_var.csv")
+# print(Time_Shift_data)
+time_list=Time_Shift_data.loc[:,'time']
+time_list=time_list.unique()
+shift_list=Time_Shift_data.loc[:,'shift']
+shift_list=shift_list.unique()
+# print('time',time_list)
+# print('shift',shift_list)
+Time_Shift_data.set_index(['time','shift'],inplace=True)
+Binary_dict=Time_Shift_data.to_dict()
 
-current_su=S[["site","SU"]]
-max_seats=S[["site","MaxCapacity"]]
+
+Current_SU=pd.read_csv("Current_SU.csv")
+# print(Current_SU)
+CurrentSU=Current_SU[['site','SU']]
+# print(CurrentSU)
+CurrentSU=CurrentSU.set_index(['site'])
+SU_dict=CurrentSU.to_dict()
+# print(SU_dict)
+
+Max_Seats=Current_SU[['site','MaxCapacity']]
+Max_seats=Max_Seats.set_index(['site'])
+Max_seats_dict=Max_seats.to_dict()
+# print(Max_seats_dict)
+
+
 M0=10
 
-#indexes
-
-
-site=rijkh["site"].unique()
-site=site.tolist()
-#site
-Time=uht["time"].unique()
-time=Time.tolist()
-Shift=uht["shift"].unique()
-shift=Shift.tolist()
-OU=rijkh["OU"].unique()
-OU=OU.tolist()
-Plangrp=rijkh["Plangrp"].unique()
-Plangrp=Plangrp.tolist()
 
 # decision variable 
 
 x = {(i,j,k,h): xp.var(vartype=xp.integer,name="x_{0}_{1}_{2}_{3}".format(i,j,k,h))
-                     for j in OU for k in Plangrp for i in site for h in Shift}
+                     for j in OU_list for k in Plangrp_list for i in site_list for h in shift_list}
 
 
 y ={(i,t):xp.var(vartype=xp.continuous,name="y_{0}_{1}".format(i,t))
-                    for i in site for t in Time}
+                    for i in site_list for t in time_list}
 
 Z = {(i):xp.var(vartype=xp.continuous,name="Z_{0}".format(i))
-                    for i in site}
+                    for i in site_list}
 W = {(i):xp.var(vartype=xp.continuous,name="W_{0}".format(i))
-                    for i in site}
+                    for i in site_list}
 
 
 #parameters
@@ -78,19 +84,36 @@ model.addVariable(x,y,Z,W)
 
 # adding constraints 
 
-myconstr1=(y[i][t]<=Z[i] for i in site for t in Time)
+myconstr1=(y[i][t]<=Z[i] for i in site_list for t in time_list)
 
-myconstr2= (2*Z[i]<=W[i] for i in site)
+myconstr2= (2*Z[i]<=W[i] for i in site_list)
+
+#Counter({key : x[i][j][k][h][key] * Binary_dict[key] for key in x[i][j][k][h]})
+# I tried using above this since I thought product between two dictonary might be in a different way
+"""
+pack = {'nuts':4.0,
+        'bolts':300.0,
+        'screws':140.0,
+        'wire(m)':3.5}
+
+for key,val in pack.items():
+    total = val * amount
+    print(total,key)
+    
+    
+"""
+    
+myconstr3= [xp.Sum(x[i][j][k][h]*Binary_dict for j in OU_list for k in Plangrp_list for h in shift_list)==y[i][t] for i in site_list for t in time_list]
 
 
-myconstr4=[b*r<=x[i][j][k][h]<=a*r for i in site for j in OU for k in Plangrp for h in shift ]
+myconstr4=[b*value_dict<=x[i,j,k,h]<=a*value_dict for i in site_list for j in OU_list for k in Plangrp_list for h in shift_list ]
 
 
-myconstr3= [xp.Sum(x[i][j][k][h]*u for j in OU for k in Plangrp for h in Shift)<=y[i][t] for i in site for t in Time]
+
 
 model.addConstraint(myconstr1,myconstr2)
 
-model.setObjective(xp.Sum([Z[i] for i in site]), sense = xp.minimize)
+model.setObjective(xp.Sum([Z[i] for i in site_list]), sense = xp.minimize)
 
 model.solve()
 
