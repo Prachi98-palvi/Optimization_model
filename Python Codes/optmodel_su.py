@@ -87,8 +87,8 @@ W = {i: xp.var(vartype=xp.continuous, name="W_{0}".format(i))
 
 # parameters
 
-a = 2
-b = 2
+a = 0.02
+b = 0.02
 
 model = xp.problem()
 model = xp.problem(name="SU_Optimization")
@@ -97,16 +97,18 @@ model.addVariable(x, y, Z, W)
 
 # adding constraints 
 
-myconstr1 = (y[i, t] <= Z[i] for i in site_list for t in time_list)
+myconstr1 = (2 * Z[i] <= W[i] for i in site_list)
 
-myconstr2 = (2 * Z[i] <= W[i] for i in site_list)
+myconstr2 = (y[i, t] <= Z[i] for i in site_list for t in time_list)
 
+####- we get no values for key , hence my constr 3 and is not working
+## myconstr6 is also having an empty list
 for h in shift_list:
     for t in time_list:
-        if Binary_dict.get((h, t)) is not None:
-            print((h, t), '\t', Binary_dict.get(h, t))
+        if Binary_dict.get((t, h)) is not None:
+            print((t, h), '\t', Binary_dict.get(h,t))
         else:
-            print('No values for key ', (h, t), '\t myconstr3 will not work')
+            print('No values for key ', (t, h), '\t myconstr3 will not work')
 
 for i in site_list:
     for j in OU_list:
@@ -130,7 +132,21 @@ for i in site_list:
                     myconstr4.append(
                         b * int(value_dict.get([i, j, k, h])) <= x[i, j, k, h] <= a * int(value_dict.get([i, j, k, h])))
 
-model.addConstraint(myconstr1, myconstr2, myconstr3, myconstr4)
+myconstr5 = [W[i]==xp.Sum(x[i,j,k,h] for j in OU_list for k in Plangrp_list for h in shift_list) for i in site_list]
+
+myconstr6 =[]
+for i in site_list:
+    if Max_seats_dict.get((i)) is not None:
+        myconstr6.append(
+            Z[i]<=int(Max_seats_dict.get([i])))
+        
+myconstr7=[x[i,j,k,h]>=0]
+myconstr8=[y[i,t]>=0]
+myconstr9=[Z[i]>=0]
+myconstr10=[W[i]>=0]
+
+
+model.addConstraint(myconstr1, myconstr2, myconstr3, myconstr4,myconstr5,myconstr6,myconstr7,myconstr8,myconstr9,myconstr10)
 
 model.setObjective(xp.Sum([Z[i] for i in site_list]), sense=xp.minimize)
 model.write("example0", "lp")
