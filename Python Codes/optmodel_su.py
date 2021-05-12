@@ -52,7 +52,7 @@ Max_seats = Max_Seats.set_index(['site'])
 Max_seats_dict = Max_seats.to_dict()
 # print(Max_seats_dict)
 
-flag_xpress_trial_version = 1   # Set 1 to run trial version; 0 to run commercial version
+flag_xpress_trial_version = 1  # Set 1 to run trial version; 0 to run commercial version
 #   Make small problem for trial version of Fico Xpress
 if flag_xpress_trial_version:
     site_list = site_list[0:2]
@@ -103,24 +103,35 @@ myconstr2 = (y[i, t] <= Z[i] for i in site_list for t in time_list)
 
 ####- we get no values for key , hence my constr 3 and is not working
 ## myconstr6 is also having an empty list
+t=0.5
+h='0.5||9.5'
+"("+str(time_list[0])+", '"+shift_list[0]+"')"
+"("+str(t)+", '"+h+"')"
 for h in shift_list:
     for t in time_list:
-        if Binary_dict.get((t, h)) is not None:
-            print((t, h), '\t', Binary_dict.get(h,t))
+        if (Binary_dict["value"][(t,h)]) is not None:
+            print((t, h), '\t', (Binary_dict["value"][(t,h)]))
         else:
             print('No values for key ', (t, h), '\t myconstr3 will not work')
+            
+# print(Binary_dict["value"]["("+str(t)+", "+h+")"])
+# print(Binary_dict["value"][(23.5, '0||9')])
+# print(Binary_dict["value"][(t, h)])
 
 for i in site_list:
     for j in OU_list:
         for k in Plangrp_list:
             for h in shift_list:
-                if value_dict.get((i, j, k, h)) is not None:
-                    print((i, j, k, h), '\t', value_dict.get((i, j, k, h)))
+                if (value_dict["Value"]([i, j, k, h])) is not None:
+                    print((i, j, k, h), '\t', (value_dict["Value"]([i, j, k, h])))
                 else:
                     print((i, j, k, h), '\t')
+                    
+#print(value_dict.get("Key"))
+                    
 
 
-myconstr3 = [xp.Sum(x[i, j, k, h] * Binary_dict.get(h, t) for j in OU_list for k in Plangrp_list for h in shift_list)
+myconstr3 = [xp.Sum(x[i, j, k, h] * Binary_dict["value"][(t, h)] for j in OU_list for k in Plangrp_list for h in shift_list)
              == y[i, t] for i in site_list for t in time_list]
 
 myconstr4 = []
@@ -136,14 +147,20 @@ myconstr5 = [W[i]==xp.Sum(x[i,j,k,h] for j in OU_list for k in Plangrp_list for 
 
 myconstr6 =[]
 for i in site_list:
-    if Max_seats_dict.get((i)) is not None:
+    if (Max_seats_dict.get(i)) is not None:
         myconstr6.append(
-            Z[i]<=int(Max_seats_dict.get([i])))
+            Z[i]<=int(Max_seats_dict.get(i)))
+    else:
+        print("error")
         
-myconstr7=[x[i,j,k,h]>=0]
-myconstr8=[y[i,t]>=0]
-myconstr9=[Z[i]>=0]
-myconstr10=[W[i]>=0]
+# i="CJB10-Coimbatore"
+# print(Max_seats_dict["Value"](i))
+
+        
+myconstr7=[x[i,j,k,h]>=0 for i in site_list for j in OU_list for k in Plangrp_list for h in shift_list]
+myconstr8=[y[i,t]>=0 for i in site_list for t in time_list]
+myconstr9=[Z[i]>=0 for i in site_list]
+myconstr10=[W[i]>=0 for i in site_list]
 
 
 model.addConstraint(myconstr1, myconstr2, myconstr3, myconstr4,myconstr5,myconstr6,myconstr7,myconstr8,myconstr9,myconstr10)
