@@ -4,19 +4,19 @@ Created on Sun May  2 19:11:29 2021
 
 @author: prachpal
 """
-
 import numpy as np
 import pandas as pd
 import xpress as xp
 from xpress import *
 from collections import Counter
+import random
 
-# input data
-rijkh = pd.read_csv("r_ijkh_decision_var.csv")
+# input data and indexes
+rijkh = pd.read_csv("r_ijkh_decision_var.csv") 
 master_data = pd.read_csv("r_ijkh_decision_var.csv")
 # print(master_data)
-site_list = master_data.loc[:, 'site']
-site_list = site_list.unique()
+site_list = master_data.loc[:, 'site'] #extracted all sites in the list
+site_list = site_list.unique() # made a list of unique sites
 OU_list = master_data.loc[:, 'OU']
 OU_list = OU_list.unique()
 Plangrp_list = master_data.loc[:, 'Plangrp']
@@ -25,7 +25,7 @@ Plangrp_list = Plangrp_list.unique()
 
 
 master_data.set_index(['site', 'OU', 'Plangrp', 'shift'], inplace=True)
-value_dict = master_data.to_dict()
+value_dict = master_data.to_dict() #converted dataframe to dictionary as in format of X variable
 
 Time_Shift_data = pd.read_csv("u_ht_binary_var.csv")
 # print(Time_Shift_data)
@@ -52,7 +52,10 @@ Max_seats = Max_Seats.set_index(['site'])
 Max_seats_dict = Max_seats.to_dict()
 # print(Max_seats_dict)
 
-flag_xpress_trial_version = 1  # Set 1 to run trial version; 0 to run commercial version
+
+"""
+Trial version used initially however it throws due to some missing variables
+flag_xpress_trial_version = 0 # Set 1 to run trial version; 0 to run commercial version
 #   Make small problem for trial version of Fico Xpress
 if flag_xpress_trial_version:
     site_list = site_list[0:2]
@@ -68,6 +71,8 @@ if flag_xpress_trial_version:
     print('shift', len(shift_list))
 else:
     print('\n\nRunning Xpress commercial version\n\n')
+    
+"""
 
 M0 = 10
 
@@ -101,12 +106,16 @@ myconstr1 = (2 * Z[i] <= W[i] for i in site_list)
 
 myconstr2 = (y[i, t] <= Z[i] for i in site_list for t in time_list)
 
+""" below development comments can be ignored """
 ####- we get no values for key , hence my constr 3 and is not working
 ## myconstr6 is also having an empty list
-t=0.5
-h='0.5||9.5'
-"("+str(time_list[0])+", '"+shift_list[0]+"')"
-"("+str(t)+", '"+h+"')"
+# t=0.5
+# h='0.5||9.5'
+# "("+str(time_list[0])+", '"+shift_list[0]+"')"
+# "("+str(t)+", '"+h+"')"
+
+# loops to check mapping of indexes and values against it exist and can be called in constraint
+
 for h in shift_list:
     for t in time_list:
         if (Binary_dict["value"][(t,h)]) is not None:
@@ -122,37 +131,60 @@ for i in site_list:
     for j in OU_list:
         for k in Plangrp_list:
             for h in shift_list:
-                if (value_dict["Value"]([i, j, k, h])) is not None:
-                    print((i, j, k, h), '\t', (value_dict["Value"]([i, j, k, h])))
+                if (i, j, k, h) in value_dict["Value"]:
+                    if (value_dict["Value"][(i, j, k, h)]) is not None:
+                        print((i, j, k, h), '\t', (value_dict["Value"][(i, j, k, h)]))
+                    else:
+                        print((i, j, k, h), '\t')
                 else:
-                    print((i, j, k, h), '\t')
+                    pass
                     
-#print(value_dict.get("Key"))
+# i=('CJB10-Coimbatore') 
+# j=('IN') 
+# k=('CS SUPPORT')
+# h=('21||6')
+
+# #this code is working now to implemented this in loop above                  
+#print(value_dict["Value"][('CJB10-Coimbatore', 'IN', 'CS SUPPORT', '21||6')])
+# print(value_dict["Value"][(i,j,k,h)]) #working 
                     
 
 
 myconstr3 = [xp.Sum(x[i, j, k, h] * Binary_dict["value"][(t, h)] for j in OU_list for k in Plangrp_list for h in shift_list)
              == y[i, t] for i in site_list for t in time_list]
 
+## - myconstr 4 and mycontr6 are not running properly - resolved - append did no work, had to specifically mention that this is xp.constraint
+
 myconstr4 = []
 for i in site_list:
     for j in OU_list:
         for k in Plangrp_list:
             for h in shift_list:
-                if value_dict.get((i, j, k, h)) is not None:
-                    myconstr4.append(
-                        b * int(value_dict.get([i, j, k, h])) <= x[i, j, k, h] <= a * int(value_dict.get([i, j, k, h])))
-
+                if (i, j, k, h) in value_dict["Value"]:
+                    if (value_dict["Value"][(i, j, k, h)]) is not None:
+                        # value1=b * int(value_dict["Value"][(i, j, k, h)])
+                        # value2=a * int(value_dict["Value"][(i, j, k, h)])
+                        # myconstr4.append(random.uniform(value1,value2))
+                        myconstr4.append(
+                            xp.constraint((1-b) * int(value_dict["Value"][(i, j, k, h)]) <= x[i, j, k, h] <= (1-a) * int(value_dict["Value"][(i, j, k, h)])))
+                else:
+                    pass
+                
 myconstr5 = [W[i]==xp.Sum(x[i,j,k,h] for j in OU_list for k in Plangrp_list for h in shift_list) for i in site_list]
 
 myconstr6 =[]
 for i in site_list:
-    if (Max_seats_dict.get(i)) is not None:
-        myconstr6.append(
-            Z[i]<=int(Max_seats_dict.get(i)))
+    if i in Max_seats_dict["MaxCapacity"]:
+        if (Max_seats_dict["MaxCapacity"][(i)]) is not None:
+            myconstr6.append(
+                xp.constraint(Z[i]<=Max_seats_dict["MaxCapacity"][(i)]))
     else:
-        print("error")
+        pass
         
+# print(Max_seats_dict["MaxCapacity"]['CJB10-Coimbatore'])
+# print(Max_seats_dict)
+# print(value_dict)        
+# print(Binary_dict)
 # i="CJB10-Coimbatore"
 # print(Max_seats_dict["Value"](i))
 
